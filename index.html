@@ -185,6 +185,7 @@
     <button class="active" data-tab="data">① 数据管理</button>
     <button data-tab="stats">② 走势统计</button>
     <button data-tab="predict">③ 号码参考</button>
+    <button data-tab="check">④ 号码验证</button>
   </div>
 
   <!-- 数据管理 -->
@@ -268,6 +269,37 @@
     <div class="card">
       <h3>生成结果</h3>
       <div id="rec-list"></div>
+    </div>
+  </section>
+
+  <!-- 号码验证 -->
+  <section class="panel" id="panel-check">
+    <div class="card">
+      <h3>号码验证 <span class="muted">（输入你打的号，对比历史开奖，看是否中过奖）</span></h3>
+      <div class="row">
+        你的号码 <input type="text" id="check-num" maxlength="3" placeholder="如 123" style="width:110px;font-family:Consolas,monospace;font-size:18px;letter-spacing:4px">
+        倍数 <select id="check-times">
+          <option value="1" selected>1倍</option><option value="2">2倍</option><option value="5">5倍</option><option value="10">10倍</option>
+        </select>
+        <button class="btn" onclick="checkNum()">开始对比</button>
+        <span id="check-status" class="muted"></span>
+      </div>
+      <div class="muted" style="margin-top:8px">
+        中奖规则：<b>直选</b>（位置完全相同，1040元/注） · <b>组3</b>（有重号，位置不限，346元/注） · <b>组6</b>（3个不同号，位置不限，173元/注）。奖金按2元1注、1倍计算，选倍数后自动倍增。
+      </div>
+    </div>
+    <div class="card" id="check-summary-card" style="display:none">
+      <h3>对比结果汇总</h3>
+      <div id="check-summary" class="stat-grid"></div>
+    </div>
+    <div class="card" id="check-list-card" style="display:none">
+      <h3>命中记录 <span class="badge" id="check-hit-count">0</span></h3>
+      <div style="max-height:380px;overflow:auto">
+        <table>
+          <thead><tr><th>期号</th><th>开奖号码</th><th>命中类型</th><th>奖金(元)</th><th>日期</th></tr></thead>
+          <tbody id="check-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </section>
 </div>
@@ -626,6 +658,65 @@ function generate(){
       </div>`).join('')}
     <div class="muted" style="margin-top:10px">⚠ 以上号码仅基于历史统计的加权抽样结果，彩票为随机事件，<b>不具备预测效力</b>，请勿作为投注依据。</div>
   `;
+}
+
+/* ===== 号码验证：对比历史开奖 ===== */
+// 福彩3D奖金（2元1注，1倍）
+const PRIZE={zhi:1040, zu3:346, zu6:173};
+function sortDigits(numStr){return numStr.split('').sort().join('')}
+function isZu3(numStr){const a=numStr.split('').sort();return a[0]===a[1]||a[1]===a[2]}
+function checkNum(){
+  const input=document.getElementById('check-num').value.replace(/\D/g,'').padStart(3,'0');
+  const times=parseInt(document.getElementById('check-times').value)||1;
+  const status=document.getElementById('check-status');
+  const sumCard=document.getElementById('check-summary-card');
+  const listCard=document.getElementById('check-list-card');
+  if(input.length!==3||!/^\d{3}$/.test(input)){status.textContent='请输入3位数字';return}
+  if(!DATA.length){status.textContent='暂无历史数据可对比';return}
+  status.textContent='正在扫描 '+DATA.length+' 期...';
+  const mySorted=sortDigits(input);
+  const hits=[];
+  let zhi=0,zu3=0,zu6=0;
+  DATA.forEach(d=>{
+    const win=d.num;
+    if(win.length!==3)return;
+    if(win===input){hits.push({...d,type:'直选',prize:PRIZE.zhi*times});zhi++;return}
+    if(sortDigits(win)===mySorted){
+      if(isZu3(win)){hits.push({...d,type:'组3',prize:PRIZE.zu3*times});zu3++}
+      else{hits.push({...d,type:'组6',prize:PRIZE.zu6*times});zu6++}
+    }
+  });
+  const totalPrize=hits.reduce((s,h)=>s+h.prize,0);
+  // 汇总卡片
+  const statHtml=[
+    {label:'扫描期数',val:DATA.length,color:'#94a3b8'},
+    {label:'直选命中',val:zhi+' 次',color:'#f472b6'},
+    {label:'组3命中',val:zu3+' 次',color:'#fbbf24'},
+    {label:'组6命中',val:zu6+' 次',color:'#38bdf8'},
+    {label:'中奖总次数',val:hits.length+' 次',color:'#a855f7'},
+    {label:'中奖总金额',val:'¥ '+totalPrize.toLocaleString(),color:'#22d3ee'},
+  ].map(s=>`<div style="background:rgba(15,21,56,.5);border:1px solid rgba(96,165,250,.18);border-radius:10px;padding:14px;text-align:center">
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">${s.label}</div>
+    <div style="font-size:22px;font-weight:800;color:${s.color};text-shadow:0 0 10px ${s.color}55">${s.val}</div>
+  </div>`).join('');
+  document.getElementById('check-summary').innerHTML=statHtml;
+  sumCard.style.display='block';
+  // 命中列表
+  document.getElementById('check-hit-count').textContent=hits.length+' 条';
+  const tb=document.getElementById('check-tbody');
+  if(!hits.length){
+    tb.innerHTML='<tr><td colspan="5" class="empty">未命中任何一期开奖号码</td></tr>';
+  }else{
+    tb.innerHTML=hits.slice().reverse().map(h=>`<tr>
+      <td>${h.period}</td>
+      <td style="font-family:Consolas,monospace;font-size:18px;font-weight:bold;letter-spacing:4px;color:#7dd3fc">${h.num}</td>
+      <td><span class="badge ${h.type==='直选'?'hot':h.type==='组3'?'cold':''}">${h.type}</span></td>
+      <td style="color:#22d3ee;font-weight:bold">¥${h.prize.toLocaleString()}</td>
+      <td>${h.date||'-'}</td>
+    </tr>`).join('');
+  }
+  listCard.style.display='block';
+  status.textContent=`对比完成：命中 ${hits.length} 次，奖金合计 ¥${totalPrize.toLocaleString()}`;
 }
 
 /* ===== 初始化 ===== */

@@ -229,17 +229,21 @@
     </div>
     <div class="card">
       <h3>基本走势图 <span class="muted">（每期百/十/个/组选 0-9 遗漏值，当期开出数字高亮）</span></h3>
-      <div class="row" style="margin-bottom:8px">
+      <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
         显示期数 <select id="trend-count" onchange="renderStats()">
           <option value="20">近20期</option>
           <option value="30" selected>近30期</option>
           <option value="50">近50期</option>
           <option value="100">近100期</option>
         </select>
-        <span class="muted">当期数字=开奖号码本身；其他数字=距上次出现的期数（遗漏值）</span>
+        <button class="btn ghost sm" onclick="zoomTrend(-0.1)">➖ 缩小</button>
+        <button class="btn ghost sm" onclick="zoomTrend(0)">⟳ 重置</button>
+        <button class="btn ghost sm" onclick="zoomTrend(0.1)">➕ 放大</button>
+        <span class="muted" id="trend-zoom-info" style="font-size:12px">100%</span>
       </div>
-      <div style="overflow:auto;max-height:560px;border:1px solid rgba(96,165,250,.15);border-radius:8px">
-        <table id="trend-table" style="font-size:12px;min-width:900px"></table>
+      <div class="muted" style="margin-bottom:8px">当期数字=开奖号码本身（蓝底高亮）；其他数字=遗漏值（≥10红 / ≥5黄 / <5灰）</div>
+      <div style="overflow:auto;max-height:580px;border:1px solid rgba(96,165,250,.15);border-radius:8px">
+        <table id="trend-table" style="font-size:13px;min-width:1180px;border-collapse:separate;border-spacing:0"></table>
       </div>
     </div>
     <div class="card">
@@ -566,21 +570,22 @@ function renderStats(){
     const uniq=[...new Set(n.split(''))];
     uniq.forEach(ch=>{const digit=+ch;lastSeen['组'][digit]=i;trendCount['组'][digit]++});
   });
-  // 渲染走势表格
+  // 渲染走势表格（固定列宽，数字居中）
+  const COL={期号:'82px',奖号:'72px',和值:'52px',走势:'30px',和尾:'46px',跨度:'46px',形态:'58px'};
   const tHead1=`<thead><tr>
-    <th rowspan="2" style="position:sticky;left:0;z-index:3;background:rgba(15,21,56,.95)">期号</th>
-    <th rowspan="2" style="background:linear-gradient(180deg,rgba(96,165,250,.12),rgba(168,85,247,.08))">奖号</th>
-    <th rowspan="2">和值</th>
+    <th rowspan="2" style="position:sticky;left:0;z-index:3;background:rgba(15,21,56,.95);min-width:${COL.期号};width:${COL.期号}">期号</th>
+    <th rowspan="2" style="background:linear-gradient(180deg,rgba(96,165,250,.12),rgba(168,85,247,.08));min-width:${COL.奖号};width:${COL.奖号}">奖号</th>
+    <th rowspan="2" style="min-width:${COL.和值};width:${COL.和值}">和值</th>
     <th colspan="10" style="background:rgba(56,189,248,.12)">百位走势</th>
     <th colspan="10" style="background:rgba(192,132,252,.12)">十位走势</th>
     <th colspan="10" style="background:rgba(251,191,36,.12)">个位走势</th>
     <th colspan="10" style="background:rgba(34,211,238,.12)">组选分布</th>
-    <th rowspan="2">和尾</th><th rowspan="2">跨度</th><th rowspan="2">形态</th>
+    <th rowspan="2" style="min-width:${COL.和尾};width:${COL.和尾}">和尾</th><th rowspan="2" style="min-width:${COL.跨度};width:${COL.跨度}">跨度</th><th rowspan="2" style="min-width:${COL.形态};width:${COL.形态}">形态</th>
   </tr><tr>`+
-    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(56,189,248,.08)">${d}</th>`).join('')+
-    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(192,132,252,.08)">${d}</th>`).join('')+
-    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(251,191,36,.08)">${d}</th>`).join('')+
-    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(34,211,238,.08)">${d}</th>`).join('')+
+    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(56,189,248,.08);min-width:${COL.走势};width:${COL.走势}">${d}</th>`).join('')+
+    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(192,132,252,.08);min-width:${COL.走势};width:${COL.走势}">${d}</th>`).join('')+
+    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(251,191,36,.08);min-width:${COL.走势};width:${COL.走势}">${d}</th>`).join('')+
+    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(34,211,238,.08);min-width:${COL.走势};width:${COL.走势}">${d}</th>`).join('')+
     `</tr></thead>`;
   const tBody=[];
   // 为了在显示窗口内正确显示遗漏值，从最早显示的那期开始逐期推进
@@ -606,11 +611,11 @@ function renderStats(){
       let html='';
       for(let x=0;x<10;x++){
         if(x===posDigit){
-          html+=`<td style="background:rgba(96,165,250,.35);color:#fff;font-weight:bold;text-shadow:0 0 6px rgba(96,165,250,.8)">${x}</td>`;
+          html+=`<td style="background:rgba(96,165,250,.35);color:#fff;font-weight:bold;text-shadow:0 0 6px rgba(96,165,250,.8);text-align:center;padding:4px 0">${x}</td>`;
         }else{
           const miss=ls[posKey][x]>=0?i-ls[posKey][x]-1:i+1;
           const color=miss>=10?'#f472b6':miss>=5?'#fbbf24':'#94a3b8';
-          html+=`<td style="color:${color}">${miss}</td>`;
+          html+=`<td style="color:${color};text-align:center;padding:4px 0">${miss}</td>`;
         }
       }
       return html;
@@ -619,22 +624,22 @@ function renderStats(){
       let html='';
       for(let x=0;x<10;x++){
         if(digits.includes(x)){
-          html+=`<td style="background:rgba(34,211,238,.30);color:#fff;font-weight:bold;text-shadow:0 0 6px rgba(34,211,238,.8)">${x}</td>`;
+          html+=`<td style="background:rgba(34,211,238,.30);color:#fff;font-weight:bold;text-shadow:0 0 6px rgba(34,211,238,.8);text-align:center;padding:4px 0">${x}</td>`;
         }else{
           const miss=ls['组'][x]>=0?i-ls['组'][x]-1:i+1;
           const color=miss>=10?'#f472b6':miss>=5?'#fbbf24':'#94a3b8';
-          html+=`<td style="color:${color}">${miss}</td>`;
+          html+=`<td style="color:${color};text-align:center;padding:4px 0">${miss}</td>`;
         }
       }
       return html;
     };
     tBody.push(`<tr>
-      <td style="position:sticky;left:0;z-index:2;background:rgba(15,21,56,.9)">${d.period}</td>
-      <td style="font-family:Consolas,monospace;font-weight:bold;letter-spacing:3px;color:#7dd3fc">${n}</td>
-      <td>${sum}</td>
+      <td style="position:sticky;left:0;z-index:2;background:rgba(15,21,56,.92);text-align:center">${d.period}</td>
+      <td style="font-family:Consolas,monospace;font-weight:bold;letter-spacing:3px;color:#7dd3fc;text-align:center">${n}</td>
+      <td style="text-align:center">${sum}</td>
       ${cells('百',digits[0])}${cells('十',digits[1])}${cells('个',digits[2])}${cellsZu()}
-      <td>${tail}</td><td>${span}</td>
-      <td><span class="badge ${form==='豹子'?'hot':form==='组3'?'cold':''}">${form}</span></td>
+      <td style="text-align:center">${tail}</td><td style="text-align:center">${span}</td>
+      <td style="text-align:center"><span class="badge ${form==='豹子'?'hot':form==='组3'?'cold':''}">${form}</span></td>
     </tr>`);
     // 更新 lastSeen
     ['百','十','个'].forEach((k,posIdx)=>{ls[k][digits[posIdx]]=i});
@@ -656,6 +661,8 @@ function renderStats(){
     }).join('')).join('')+
     '<td colspan="3"></td></tr>';
   document.getElementById('trend-table').innerHTML=tHead1+'<tbody>'+tBody.join('')+totalRow+'</tbody>';
+  // 重新应用缩放比例
+  if(trendZoom!==1.0){zoomTrend(trendZoom-1.0)}
 
   // 频率表
   const totalDigits=total*3;
@@ -733,6 +740,17 @@ function renderStats(){
       plugins:{legend:{position:'bottom',labels:{color:'#e2e8f0',padding:14,usePointStyle:true,pointStyle:'circle'}}}
     }
   });
+}
+
+/* ===== 走势图缩放 ===== */
+let trendZoom=1.0;
+function zoomTrend(delta){
+  if(delta===0){trendZoom=1.0}
+  else{trendZoom=Math.max(0.6,Math.min(1.6,trendZoom+delta))}
+  const tbl=document.getElementById('trend-table');
+  if(tbl){tbl.style.fontSize=(13*trendZoom)+'px';tbl.style.minWidth=(1180*trendZoom)+'px'}
+  const info=document.getElementById('trend-zoom-info');
+  if(info)info.textContent=Math.round(trendZoom*100)+'%';
 }
 
 /* ===== 号码参考生成 ===== */

@@ -228,6 +228,21 @@
       <div id="stat-overview" class="muted">暂无数据</div>
     </div>
     <div class="card">
+      <h3>基本走势图 <span class="muted">（每期百/十/个/组选 0-9 遗漏值，当期开出数字高亮）</span></h3>
+      <div class="row" style="margin-bottom:8px">
+        显示期数 <select id="trend-count" onchange="renderStats()">
+          <option value="20">近20期</option>
+          <option value="30" selected>近30期</option>
+          <option value="50">近50期</option>
+          <option value="100">近100期</option>
+        </select>
+        <span class="muted">当期数字=开奖号码本身；其他数字=距上次出现的期数（遗漏值）</span>
+      </div>
+      <div style="overflow:auto;max-height:560px;border:1px solid rgba(96,165,250,.15);border-radius:8px">
+        <table id="trend-table" style="font-size:12px;min-width:900px"></table>
+      </div>
+    </div>
+    <div class="card">
       <h3>各数字频率与遗漏 <span class="muted">（百/十/个位 + 合计）</span></h3>
       <div style="overflow:auto"><table id="stat-table">
         <thead><tr><th>数字</th><th>百位</th><th>十位</th><th>个位</th><th>合计</th><th>占比</th><th>当前遗漏</th><th>最大遗漏</th><th>平均遗漏</th></tr></thead>
@@ -537,6 +552,110 @@ function renderStats(){
     近10期：<span style="font-family:monospace;letter-spacing:2px">${recent||'-'}</span><br>
     <span class="muted">提示：遗漏=距上次出现的期数；冷号通常遗漏长、占比低；热号反之。</span>
   `;
+
+  // ===== 基本走势图 =====
+  const trendN=parseInt(document.getElementById('trend-count').value)||30;
+  const trendData=sorted.slice(-trendN);
+  // 为每个位置（百/十/个/组选）维护各数字最后出现的索引
+  const lastSeen={百:Array(10).fill(-1),十:Array(10).fill(-1),个:Array(10).fill(-1),组:Array(10).fill(-1)};
+  const trendCount={百:Array(10).fill(0),十:Array(10).fill(0),个:Array(10).fill(0),组:Array(10).fill(0)};
+  // 先基于全部历史初始化 lastSeen（保证遗漏值准确）
+  sorted.forEach((d,i)=>{
+    const n=d.num;
+    ['百','十','个'].forEach((k,posIdx)=>{const digit=+n[posIdx];lastSeen[k][digit]=i;trendCount[k][digit]++});
+    const uniq=[...new Set(n.split(''))];
+    uniq.forEach(ch=>{const digit=+ch;lastSeen['组'][digit]=i;trendCount['组'][digit]++});
+  });
+  // 渲染走势表格
+  const tHead1=`<thead><tr>
+    <th rowspan="2" style="position:sticky;left:0;z-index:3;background:rgba(15,21,56,.95)">期号</th>
+    <th rowspan="2" style="background:linear-gradient(180deg,rgba(96,165,250,.12),rgba(168,85,247,.08))">奖号</th>
+    <th rowspan="2">和值</th>
+    <th colspan="10" style="background:rgba(56,189,248,.12)">百位走势</th>
+    <th colspan="10" style="background:rgba(192,132,252,.12)">十位走势</th>
+    <th colspan="10" style="background:rgba(251,191,36,.12)">个位走势</th>
+    <th colspan="10" style="background:rgba(34,211,238,.12)">组选分布</th>
+    <th rowspan="2">和尾</th><th rowspan="2">跨度</th><th rowspan="2">形态</th>
+  </tr><tr>`+
+    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(56,189,248,.08)">${d}</th>`).join('')+
+    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(192,132,252,.08)">${d}</th>`).join('')+
+    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(251,191,36,.08)">${d}</th>`).join('')+
+    [0,1,2,3,4,5,6,7,8,9].map(d=>`<th style="background:rgba(34,211,238,.08)">${d}</th>`).join('')+
+    `</tr></thead>`;
+  const tBody=[];
+  // 为了在显示窗口内正确显示遗漏值，从最早显示的那期开始逐期推进
+  const startIdx=sorted.length-trendN;
+  // 先重置 lastSeen 到 startIdx 之前的状态
+  const ls={百:Array(10).fill(-1),十:Array(10).fill(-1),个:Array(10).fill(-1),组:Array(10).fill(-1)};
+  for(let i=0;i<startIdx;i++){
+    const n=sorted[i].num;
+    ['百','十','个'].forEach((k,posIdx)=>{ls[k][+n[posIdx]]=i});
+    [...new Set(n.split(''))].forEach(ch=>{ls['组'][+ch]=i});
+  }
+  // 逐期渲染
+  for(let i=startIdx;i<sorted.length;i++){
+    const d=sorted[i];const n=d.num;
+    const digits=[+n[0],+n[1],+n[2]];
+    const sum=digits.reduce((a,b)=>a+b,0);
+    const span=Math.max(...digits)-Math.min(...digits);
+    const tail=sum%10;
+    let form='组六';
+    if(digits[0]===digits[1]&&digits[1]===digits[2])form='豹子';
+    else if(digits[0]===digits[1]||digits[1]===digits[2]||digits[0]===digits[2])form='组3';
+    const cells=(posKey,posDigit)=>{
+      let html='';
+      for(let x=0;x<10;x++){
+        if(x===posDigit){
+          html+=`<td style="background:rgba(96,165,250,.35);color:#fff;font-weight:bold;text-shadow:0 0 6px rgba(96,165,250,.8)">${x}</td>`;
+        }else{
+          const miss=ls[posKey][x]>=0?i-ls[posKey][x]-1:i+1;
+          const color=miss>=10?'#f472b6':miss>=5?'#fbbf24':'#94a3b8';
+          html+=`<td style="color:${color}">${miss}</td>`;
+        }
+      }
+      return html;
+    };
+    const cellsZu=()=>{
+      let html='';
+      for(let x=0;x<10;x++){
+        if(digits.includes(x)){
+          html+=`<td style="background:rgba(34,211,238,.30);color:#fff;font-weight:bold;text-shadow:0 0 6px rgba(34,211,238,.8)">${x}</td>`;
+        }else{
+          const miss=ls['组'][x]>=0?i-ls['组'][x]-1:i+1;
+          const color=miss>=10?'#f472b6':miss>=5?'#fbbf24':'#94a3b8';
+          html+=`<td style="color:${color}">${miss}</td>`;
+        }
+      }
+      return html;
+    };
+    tBody.push(`<tr>
+      <td style="position:sticky;left:0;z-index:2;background:rgba(15,21,56,.9)">${d.period}</td>
+      <td style="font-family:Consolas,monospace;font-weight:bold;letter-spacing:3px;color:#7dd3fc">${n}</td>
+      <td>${sum}</td>
+      ${cells('百',digits[0])}${cells('十',digits[1])}${cells('个',digits[2])}${cellsZu()}
+      <td>${tail}</td><td>${span}</td>
+      <td><span class="badge ${form==='豹子'?'hot':form==='组3'?'cold':''}">${form}</span></td>
+    </tr>`);
+    // 更新 lastSeen
+    ['百','十','个'].forEach((k,posIdx)=>{ls[k][digits[posIdx]]=i});
+    [...new Set(n.split(''))].forEach(ch=>{ls['组'][+ch]=i});
+  }
+  // 底部统计：窗口内出现总次数
+  const winCount={百:Array(10).fill(0),十:Array(10).fill(0),个:Array(10).fill(0),组:Array(10).fill(0)};
+  for(let i=startIdx;i<sorted.length;i++){
+    const n=sorted[i].num;
+    ['百','十','个'].forEach((k,posIdx)=>{winCount[k][+n[posIdx]]++});
+    [...new Set(n.split(''))].forEach(ch=>{winCount['组'][+ch]++});
+  }
+  const totalRow='<tr style="position:sticky;bottom:0;background:rgba(15,21,56,.95);font-weight:bold">'+
+    '<td colspan="3" style="position:sticky;left:0;z-index:2;background:rgba(15,21,56,.95)">出现总次数</td>'+
+    ['百','十','个','组'].map(k=>[0,1,2,3,4,5,6,7,8,9].map(d=>{
+      const v=winCount[k][d];
+      const bg=v>=trendN*0.2?'rgba(244,114,182,.25)':v<=trendN*0.08?'rgba(56,189,248,.2)':'transparent';
+      return `<td style="background:${bg};color:#e2e8f0">${v}</td>`;
+    }).join('')).join('')+
+    '<td colspan="3"></td></tr>';
+  document.getElementById('trend-table').innerHTML=tHead1+'<tbody>'+tBody.join('')+totalRow+'</tbody>';
 
   // 频率表
   const totalDigits=total*3;

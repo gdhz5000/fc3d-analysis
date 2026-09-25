@@ -633,7 +633,8 @@ function renderStats(){
       }
       return html;
     };
-    tBody.push(`<tr>
+    // unshift 让最新一期显示在最上面
+    tBody.unshift(`<tr>
       <td style="position:sticky;left:0;z-index:2;background:rgba(15,21,56,.92);text-align:center">${d.period}</td>
       <td style="font-family:Consolas,monospace;font-weight:bold;letter-spacing:3px;color:#7dd3fc;text-align:center">${n}</td>
       <td style="text-align:center">${sum}</td>

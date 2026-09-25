@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>福彩3D 数据分析工具</title>
+<script src="chart.umd.min.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';document.head.appendChild(s)"></script>
+<script src="data.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Microsoft YaHei",sans-serif;background:#f4f6f9;color:#2c3e50;line-height:1.6;padding:16px}
+  .wrap{max-width:1100px;margin:0 auto}
+  header{background:linear-gradient(135deg,#3b82f6,#1e40af);color:#fff;padding:18px 22px;border-radius:10px;margin-bottom:14px}
+  header h1{font-size:20px;margin-bottom:4px}
+  header .sub{font-size:12px;opacity:.9}
+  .disclaimer{background:#fff7ed;border-left:4px solid #f59e0b;color:#92400e;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:14px}
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tabs button{flex:1;min-width:120px;padding:10px;border:1px solid #d1d5db;background:#fff;border-radius:8px 8px 0 0;cursor:pointer;font-size:14px;color:#475569;transition:.15s}
+  .tabs button.active{background:#3b82f6;color:#fff;border-color:#3b82f6}
+  .panel{display:none;background:#fff;border:1px solid #e5e7eb;border-radius:0 0 10px 10px;padding:16px}
+  .panel.active{display:block}
+  .card{border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:12px}
+  .card h3{font-size:14px;color:#1e40af;margin-bottom:8px;border-bottom:1px dashed #e5e7eb;padding-bottom:6px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input[type=text],input[type=date],textarea,select{border:1px solid #d1d5db;border-radius:6px;padding:7px 9px;font-size:14px;width:auto}
+  input[type=text],input[type=date]{width:140px}
+  textarea{width:100%;min-height:120px;font-family:Consolas,monospace}
+  button.btn{padding:7px 14px;border:none;border-radius:6px;background:#3b82f6;color:#fff;cursor:pointer;font-size:13px;transition:.15s}
+  button.btn:hover{background:#2563eb}
+  button.btn.sm{padding:3px 9px;font-size:12px}
+  button.btn.danger{background:#ef4444}
+  button.btn.danger:hover{background:#dc2626}
+  button.btn.ghost{background:#e5e7eb;color:#475569}
+  button.btn.ghost:hover{background:#d1d5db}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border:1px solid #e5e7eb;padding:6px 8px;text-align:center}
+  th{background:#f1f5f9;color:#475569}
+  tbody tr:nth-child(even){background:#f9fafb}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .num-badge{display:inline-block;width:28px;height:28px;line-height:28px;border-radius:50%;background:#dbeafe;color:#1e40af;font-weight:bold;margin:2px}
+  .num-badge.hot{background:#fee2e2;color:#b91c1c}
+  .num-badge.cold{background:#dbeafe;color:#1e40af}
+  .num-badge.warn{background:#fef3c7;color:#b45309}
+  .chart-box{position:relative;height:300px;margin-top:10px}
+  .rec-item{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px;margin-bottom:8px}
+  .rec-item .nums{font-size:22px;font-weight:bold;color:#0369a1;letter-spacing:4px}
+  .rec-item .reason{font-size:12px;color:#475569;margin-top:4px}
+  .empty{color:#94a3b8;text-align:center;padding:30px;font-size:14px}
+  .badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;background:#e0e7ff;color:#3730a3;margin-left:6px}
+  .hot{background:#fee2e2;color:#b91c1c}
+  .cold{background:#dbeafe;color:#1e40af}
+  .muted{color:#94a3b8;font-size:12px}
+  @media(max-width:640px){input[type=text],input[type=date]{width:100%}.row{flex-direction:column;align-items:stretch}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>福彩3D 数据分析工具</h1>
+    <div class="sub">历史数据统计 · 冷热号分析 · 走势可视化 · 号码参考生成</div>
+  </header>
+  <div class="disclaimer">
+    ⚠ 彩票为独立随机事件，历史走势不影响未来开奖。本工具仅做历史数据统计分析，<b>不构成任何投注建议</b>，请理性娱乐，量力而行。
+  </div>
+
+  <div class="tabs">
+    <button class="active" data-tab="data">① 数据管理</button>
+    <button data-tab="stats">② 走势统计</button>
+    <button data-tab="predict">③ 号码参考</button>
+  </div>
+
+  <!-- 数据管理 -->
+  <section class="panel active" id="panel-data">
+    <div class="card">
+      <h3>福彩3D 数据 <span class="muted">（基础：本地 data.json · 增量：apihz 公共接口）</span></h3>
+      <div class="row">
+        增量期数 <select id="fetch-count">
+          <option value="30" selected>近30期</option>
+          <option value="50">近50期</option>
+          <option value="100">近100期</option>
+        </select>
+        <button class="btn" id="fetch-btn" onclick="fetchOnline()">立即刷新</button>
+        <span id="fetch-status" class="muted">页面加载中：先读取本地数据，再在线增量...</span>
+      </div>
+      <div class="muted" style="margin-top:6px">打开页面自动加载本地 data.json（200期基础数据，可用 fetch_data.py 重新抓取更新），再调 apihz 公共接口按期号循环增量获取最新开奖。在线接口偶发不稳，失败时仍可使用本地数据。</div>
+    </div>
+
+    <div class="card">
+      <h3>历史数据 <span class="badge" id="data-count">0</span></h3>
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn ghost sm" onclick="exportData('csv')">导出CSV</button>
+        <button class="btn ghost sm" onclick="exportData('json')">导出JSON</button>
+        <button class="btn danger sm" onclick="clearAll()">清空全部</button>
+      </div>
+      <div style="max-height:360px;overflow:auto">
+        <table>
+          <thead><tr><th>序</th><th>期号</th><th>号码</th><th>日期</th><th>操作</th></tr></thead>
+          <tbody id="data-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 走势统计 -->
+  <section class="panel" id="panel-stats">
+    <div class="card">
+      <h3>概览</h3>
+      <div id="stat-overview" class="muted">暂无数据</div>
+    </div>
+    <div class="card">
+      <h3>各数字频率与遗漏 <span class="muted">（百/十/个位 + 合计）</span></h3>
+      <div style="overflow:auto"><table id="stat-table">
+        <thead><tr><th>数字</th><th>百位</th><th>十位</th><th>个位</th><th>合计</th><th>占比</th><th>当前遗漏</th><th>最大遗漏</th><th>平均遗漏</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h3>走势折线 <span class="muted">（百/十/个位 vs 期数，近30期）</span></h3>
+      <div class="chart-box"><canvas id="chart-trend"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>频率柱状图 <span class="muted">（0-9 出现次数）</span></h3>
+      <div class="chart-box"><canvas id="chart-freq"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>冷热号标识</h3>
+      <div style="margin-bottom:6px"><span class="badge hot">热号</span> 出现频率高 &nbsp; <span class="badge cold">冷号</span> 出现频率低 &nbsp; <span class="badge">遗漏长</span> 当前遗漏值大</div>
+      <div id="stat-heat"></div>
+    </div>
+  </section>
+
+  <!-- 号码参考 -->
+  <section class="panel" id="panel-predict">
+    <div class="card">
+      <h3>参考号码生成</h3>
+      <div class="row" style="margin-bottom:8px">
+        策略 <select id="strategy">
+          <option value="cold">冷号补偿（偏好遗漏期数长的数字）</option>
+          <option value="hot">热号追势（偏好近期出现多的数字）</option>
+          <option value="balanced" selected>综合均衡（冷热结合）</option>
+          <option value="random">纯随机</option>
+        </select>
+        组数 <select id="group-count">
+          <option>5</option><option selected>10</option><option>20</option>
+        </select>
+        <button class="btn" onclick="generate()">生成参考号码</button>
+      </div>
+      <div class="muted">说明：依据所选策略对0-9各数字按权重抽样，分别填入百/十/个位。<b>权重仅基于历史统计，不代表未来概率。</b></div>
+    </div>
+    <div class="card">
+      <h3>生成结果</h3>
+      <div id="rec-list"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ===== 数据层 ===== */
+const STORE_KEY='fc3d_data_v1';
+let DATA=load();
+
+function load(){
+  try{return JSON.parse(localStorage.getItem(STORE_KEY))||[]}catch(e){return[]}
+}
+function save(){
+  localStorage.setItem(STORE_KEY,JSON.stringify(DATA));
+}
+function fmtNum(n){return String(n).padStart(3,'0')}
+
+/* ===== Tab 切换 ===== */
+document.querySelectorAll('.tabs button').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab==='stats')renderStats();
+    if(btn.dataset.tab==='predict'&&document.getElementById('rec-list').innerHTML==='')renderRecPlaceholder();
+  };
+});
+
+/* ===== 数据管理 ===== */
+function del(i){DATA.splice(i,1);save();renderTable()}
+function clearAll(){
+  if(!confirm('确认清空全部 '+DATA.length+' 条数据？此操作不可恢复'))return;
+  DATA=[];save();renderTable();
+}
+function exportData(type){
+  if(!DATA.length){alert('暂无数据');return}
+  let content,name,mime;
+  if(type==='csv'){
+    content='期号,号码,日期\n'+DATA.map(d=>`${d.period},${d.num},${d.date}`).join('\n');
+    name='fc3d.csv';mime='text/csv';
+  }else{
+    content=JSON.stringify(DATA,null,2);name='fc3d.json';mime='application/json';
+  }
+  const blob=new Blob([content],{type:mime});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=name;a.click();
+}
+function renderTable(){
+  const tb=document.getElementById('data-tbody');
+  document.getElementById('data-count').textContent=DATA.length+' 条';
+  if(!DATA.length){tb.innerHTML='<tr><td colspan="5" class="empty">暂无数据，正在自动获取官方开奖数据...</td></tr>';return}
+  // 倒序显示
+  tb.innerHTML=DATA.slice().reverse().map((d,idx)=>{
+    const realIdx=DATA.length-1-idx;
+    return `<tr>
+      <td>${realIdx+1}</td>
+      <td>${d.period}</td>
+      <td><b>${d.num}</b></td>
+      <td>${d.date||'-'}</td>
+      <td><button class="btn danger sm" onclick="del(${realIdx})">删</button></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ===== 在线抓取（apihz 公共接口 + 直连/多代理兜底，按期号循环增量） ===== */
+const APIHZ='https://cn.apihz.cn/api/caipiao/fucai3d.php?id=88888888&key=88888888';
+const PROXIES=[
+  u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
+  u=>'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u),
+  u=>'https://corsproxy.io/?url='+encodeURIComponent(u),
+  u=>'https://thingproxy.freeboard.io/fetch/'+u,
+];
+async function apihzQueryOne(qh){
+  // 返回 {qihao,number,time,name,xiaoshou,code} 或 null
+  const url=qh?APIHZ+'&qh='+qh:APIHZ;
+  // 1) 直连（apihz 部分接口允许跨域）
+  try{
+    const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),8000);
+    const r=await fetch(url,{cache:'no-store',signal:ctrl.signal});
+    clearTimeout(tid);
+    if(r.ok){const o=JSON.parse(await r.text());if(o&&+o.code===200&&o.number)return o;}
+  }catch(e){}
+  // 2) 多代理兜底
+  for(const p of PROXIES){
+    try{
+      const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),10000);
+      const r=await fetch(p(url),{cache:'no-store',signal:ctrl.signal});
+      clearTimeout(tid);
+      if(!r.ok)continue;
+      const o=JSON.parse(await r.text());
+      if(o&&+o.code===200&&o.number)return o;
+    }catch(e){}
+  }
+  return null;
+}
+async function fetchOnline(){
+  const btn=document.getElementById('fetch-btn');
+  const status=document.getElementById('fetch-status');
+  const want=+document.getElementById('fetch-count').value;
+  btn.disabled=true;
+  status.textContent='查询最新一期...';
+  // Step 1: 拿最新一期
+  const latest=await apihzQueryOne();
+  if(!latest){
+    btn.disabled=false;
+    status.innerHTML='<span style="color:#dc2626">在线抓取失败：所有数据源不可用。可继续使用本地数据，稍后重试。</span>';
+    return;
+  }
+  const latestQ=+latest.qihao;
+  const baseQ=DATA.length?+DATA[DATA.length-1].period:0;
+  // 计算需要查的期号列表：从 baseQ+1 到 latestQ
+  let targets=[];
+  for(let q=baseQ+1;q<=latestQ;q++)targets.push(q);
+  // 上限：用户选择期数 want，但不超过 50 防止过载
+  const cap=Math.min(want,50);
+  if(targets.length>cap)targets=targets.slice(-cap);
+  if(targets.length===0){
+    btn.disabled=false;
+    status.innerHTML='<span style="color:#16a34a">已是最新：本地数据已包含至 '+latest.qihao+' 期（'+latest.number.replace(/\|/g,'')+'）</span>';
+    return;
+  }
+  // Step 2: 循环按期号查询，每期 150ms 间隔避免频次限制
+  const existing=new Set(DATA.map(d=>d.period));
+  let add=0,skip=0,miss=0;
+  for(let i=0;i<targets.length;i++){
+    const qh=targets[i];
+    status.textContent='增量抓取 '+(i+1)+'/'+targets.length+' (期 '+qh+')...';
+    const o=await apihzQueryOne(qh);
+    if(!o||!o.qihao||!o.number){miss++;continue;}
+    const period=String(o.qihao).trim();
+    if(existing.has(period)){skip++;continue;}
+    const num=String(o.number).replace(/\D/g,''); // "4|8|6" → "486"
+    if(!/^\d{3}$/.test(num)){skip++;continue;}
+    const date=String(o.time||'').replace(/\(.*\)/,'').trim(); // "2026-09-23(三)" → "2026-09-23"
+    DATA.push({period,num,date});
+    existing.add(period);
+    add++;
+    await new Promise(r=>setTimeout(r,150));
+  }
+  // 升序排序保证最新在尾部
+  DATA.sort((a,b)=>String(a.period).localeCompare(String(b.period)));
+  save();renderTable();
+  btn.disabled=false;
+  const latestNum=latest.number.replace(/\|/g,'');
+  status.innerHTML='<span style="color:#16a34a">抓取完成：新增 '+add+' 条'+(skip?'，跳过 '+skip+' 条（重复）':'')+(miss?'，失败 '+miss+' 条（无数据）':'')+'。最新期：'+latest.qihao+' → '+latestNum+'</span>';
+}
+
+/* ===== 统计分析 ===== */
+let chartTrend=null,chartFreq=null;
+function renderStats(){
+  if(!DATA.length){
+    document.getElementById('stat-overview').innerHTML='<span class="muted">暂无数据，请先在「数据管理」录入或导入历史开奖</span>';
+    document.getElementById('stat-table').querySelector('tbody').innerHTML='';
+    document.getElementById('stat-heat').innerHTML='';
+    if(chartTrend)chartTrend.destroy();
+    if(chartFreq)chartFreq.destroy();
+    return;
+  }
+  // 按期号排序（升序）
+  const sorted=[...DATA].sort((a,b)=>String(a.period).localeCompare(String(b.period)));
+  const total=sorted.length;
+
+  // 百/十/个位 0-9 计数
+  const pos={百:Array(10).fill(0),十:Array(10).fill(0),个:Array(10).fill(0)};
+  const sumCnt=Array(10).fill(0);
+  const lastIdx=Array(10).fill(-1); // 最后出现位置
+  const maxGap=Array(10).fill(0);
+  const gapsHistory=Array.from({length:10},()=>[]); // 每个数字的遗漏序列（注意避免fill共享引用）
+  sorted.forEach((d,i)=>{
+    const n=d.num;
+    [n[0],n[1],n[2]].forEach((ch,posIdx)=>{
+      const digit=+ch;
+      const key=['百','十','个'][posIdx];
+      pos[key][digit]++;
+      sumCnt[digit]++;
+      const gap=i-lastIdx[digit]-1;
+      if(lastIdx[digit]>=0){
+        gapsHistory[digit]=[...gapsHistory[digit],gap];
+        if(gap>maxGap[digit])maxGap[digit]=gap;
+      }
+      lastIdx[digit]=i;
+    });
+  });
+  const currentMiss=Array(10).fill(0);
+  for(let d=0;d<10;d++){
+    let last=-1;
+    sorted.forEach((rec,i)=>{if(rec.num.includes(d))last=i});
+    currentMiss[d]=total-1-last;
+  }
+  const avgGap=Array(10).fill(0).map((_,d)=>{
+    const arr=gapsHistory[d]||[];
+    return arr.length?Math.round(arr.reduce((a,b)=>a+b,0)/arr.length*10)/10:0;
+  });
+
+  // 概览
+  const recent=sorted.slice(-10).map(d=>d.num).join(' ');
+  const lastNum=sorted[sorted.length-1].num;
+  document.getElementById('stat-overview').innerHTML=`
+    总期数：<b>${total}</b> &nbsp;|&nbsp; 最新一期：<b>${sorted[sorted.length-1].period} → ${lastNum}</b><br>
+    近10期：<span style="font-family:monospace;letter-spacing:2px">${recent||'-'}</span><br>
+    <span class="muted">提示：遗漏=距上次出现的期数；冷号通常遗漏长、占比低；热号反之。</span>
+  `;
+
+  // 频率表
+  const totalDigits=total*3;
+  const tbody=document.getElementById('stat-table').querySelector('tbody');
+  tbody.innerHTML='';
+  for(let d=0;d<10;d++){
+    const pct=(sumCnt[d]/totalDigits*100).toFixed(1)+'%';
+    const cls=currentMiss[d]>avgGap[d]*1.5?'warn':(sumCnt[d]>totalDigits/10*1.3?'hot':(sumCnt[d]<totalDigits/10*0.7?'cold':''));
+    tbody.innerHTML+=`<tr>
+      <td><span class="num-badge ${cls}">${d}</span></td>
+      <td>${pos['百'][d]}</td><td>${pos['十'][d]}</td><td>${pos['个'][d]}</td>
+      <td><b>${sumCnt[d]}</b></td><td>${pct}</td>
+      <td>${currentMiss[d]}</td><td>${maxGap[d]}</td><td>${avgGap[d]}</td>
+    </tr>`;
+  }
+
+  // 冷热号标识
+  const sortedByCnt=[...Array(10).keys()].sort((a,b)=>sumCnt[b]-sumCnt[a]);
+  const hot=sortedByCnt.slice(0,3),cold=sortedByCnt.slice(-3);
+  const sortedByMiss=[...Array(10).keys()].sort((a,b)=>currentMiss[b]-currentMiss[a]);
+  const longMiss=sortedByMiss.slice(0,3);
+  document.getElementById('stat-heat').innerHTML=`
+    热号（出现最多）：<b>${hot.map(d=>`<span class="num-badge hot">${d}</span>`).join('')}</b><br>
+    冷号（出现最少）：<b>${cold.map(d=>`<span class="num-badge cold">${d}</span>`).join('')}</b><br>
+    遗漏长（当前遗漏最大）：<b>${longMiss.map(d=>`<span class="num-badge warn">${d}</span>`).join('')}</b>
+  `;
+
+  // 走势图（近30期）
+  const recent30=sorted.slice(-30);
+  const labels=recent30.map(d=>d.period.slice(-3));
+  const ds=[
+    {label:'百位',data:recent30.map(d=>+d.num[0]),borderColor:'#3b82f6',tension:.3},
+    {label:'十位',data:recent30.map(d=>+d.num[1]),borderColor:'#10b981',tension:.3},
+    {label:'个位',data:recent30.map(d=>+d.num[2]),borderColor:'#f59e0b',tension:.3},
+  ].map(s=>({...s,fill:false,borderWidth:2,pointRadius:2}));
+  if(typeof Chart==='undefined'){
+    document.getElementById('stat-overview').innerHTML+='<br><span style="color:#dc2626">⚠ 图表库(Chart.js)未加载，走势图无法渲染。请刷新页面或检查网络。</span>';
+    return;
+  }
+  if(chartTrend)chartTrend.destroy();
+  chartTrend=new Chart(document.getElementById('chart-trend'),{
+    type:'line',
+    data:{labels,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,
+      scales:{y:{min:0,max:9,ticks:{stepSize:1}},x:{ticks:{maxRotation:45}}},
+      plugins:{legend:{position:'bottom'}}
+    }
+  });
+
+  // 频率柱状
+  if(chartFreq)chartFreq.destroy();
+  chartFreq=new Chart(document.getElementById('chart-freq'),{
+    type:'bar',
+    data:{labels:[0,1,2,3,4,5,6,7,8,9],
+      datasets:[{label:'百位',data:pos['百'],backgroundColor:'#93c5fd'},
+        {label:'十位',data:pos['十'],backgroundColor:'#6ee7b7'},
+        {label:'个位',data:pos['个'],backgroundColor:'#fcd34d'}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      scales:{y:{beginAtZero:true,ticks:{precision:0}}},
+      plugins:{legend:{position:'bottom'}}
+    }
+  });
+}
+
+/* ===== 号码参考生成 ===== */
+function renderRecPlaceholder(){
+  document.getElementById('rec-list').innerHTML='<div class="empty">选择策略后点击「生成参考号码」</div>';
+}
+function weightedPick(weights){
+  const sum=weights.reduce((a,b)=>a+b,0);
+  let r=Math.random()*sum;
+  for(let i=0;i<weights.length;i++){r-=weights[i];if(r<=0)return i}
+  return weights.length-1;
+}
+function generate(){
+  if(!DATA.length){alert('暂无历史数据，请先录入或导入');return}
+  const strat=document.getElementById('strategy').value;
+  const cnt=+document.getElementById('group-count').value;
+
+  // 计算权重
+  const pos={百:Array(10).fill(0),十:Array(10).fill(0),个:Array(10).fill(0)};
+  const sumCnt=Array(10).fill(0);
+  const sorted=[...DATA].sort((a,b)=>String(a.period).localeCompare(String(b.period)));
+  const total=sorted.length;
+  sorted.forEach(d=>{[0,1,2].forEach(i=>{const k=['百','十','个'][i];pos[k][+d.num[i]]++;sumCnt[+d.num[i]]++})});
+  const currentMiss=Array(10).fill(0);
+  for(let d=0;d<10;d++){let last=-1;sorted.forEach((r,i)=>{if(r.num.includes(d))last=i});currentMiss[d]=total-1-last}
+  const avg=total*3/10;
+
+  // 各位的权重
+  const wPos={百:[],十:[],个:[]};
+  ['百','十','个'].forEach(k=>{
+    wPos[k]=pos[k].map((c,d)=>{
+      const miss=currentMiss[d];
+      let w=1;
+      if(strat==='hot')w=Math.max(0.1,c+0.5);
+      else if(strat==='cold')w=Math.max(0.1,(avg-c)+miss*0.5+0.5);
+      else if(strat==='balanced')w=Math.max(0.1,c*0.5+(avg-c)+miss*0.3+0.5);
+      else w=1; // random
+      return w;
+    });
+  });
+
+  const strategyName={hot:'热号追势',cold:'冷号补偿',balanced:'综合均衡',random:'纯随机'}[strat];
+  const results=[];
+  for(let i=0;i<cnt;i++){
+    let n='';
+    ['百','十','个'].forEach(k=>{
+      let pick;
+      if(strat==='random'){pick=Math.floor(Math.random()*10)}
+      else{pick=weightedPick(wPos[k])}
+      n+=pick;
+    });
+    const reasonParts=[];
+    if(strat==='hot')reasonParts.push('优先选取历史出现频率较高的数字');
+    else if(strat==='cold')reasonParts.push('偏向出现较少、当前遗漏较长的数字');
+    else if(strat==='balanced')reasonParts.push('结合频率与遗漏值综合加权');
+    else reasonParts.push('纯随机抽样');
+    // 标注该号码特征
+    const digits=[...n].map(Number);
+    const curMissSum=digits.reduce((s,d)=>s+currentMiss[d],0);
+    const freqSum=digits.reduce((s,d)=>s+sumCnt[d],0);
+    reasonParts.push(`本期数字当前遗漏合计=${curMissSum}，历史合计出现=${freqSum}次`);
+    results.push({num:n,reason:reasonParts.join('；')});
+  }
+  // 去重展示
+  const seen=new Set();const unique=[];
+  results.forEach(r=>{if(!seen.has(r.num)){seen.add(r.num);unique.push(r)}});
+  // 若去重后不足，补齐随机
+  while(unique.length<cnt){const n=fmtNum(Math.floor(Math.random()*1000));if(!seen.has(n)){seen.add(n);unique.push({num:n,reason:'补充随机'})}}
+
+  document.getElementById('rec-list').innerHTML=`
+    <div class="muted" style="margin-bottom:8px">策略：<b>${strategyName}</b> · 共生成 <b>${cnt}</b> 组参考号码</div>
+    ${unique.slice(0,cnt).map((r,i)=>`
+      <div class="rec-item">
+        <div><span class="muted">${i+1}.</span> <span class="nums">${r.num}</span></div>
+        <div class="reason">${r.reason}</div>
+      </div>`).join('')}
+    <div class="muted" style="margin-top:10px">⚠ 以上号码仅基于历史统计的加权抽样结果，彩票为随机事件，<b>不具备预测效力</b>，请勿作为投注依据。</div>
+  `;
+}
+
+/* ===== 初始化 ===== */
+renderTable();
+renderRecPlaceholder();
+// 启动：使用 <script src="data.js"> 已加载的 window.LOCAL_DATA，仅显示最近100期，不自动在线抓取
+(function init(){
+  const status=document.getElementById('fetch-status');
+  const arr=Array.isArray(window.LOCAL_DATA)?window.LOCAL_DATA:[];
+  if(arr.length){
+    const ex=new Set(DATA.map(d=>d.period));
+    arr.forEach(d=>{
+      if(d&&d.period&&!ex.has(d.period)){
+        DATA.push({period:String(d.period),num:String(d.num),date:String(d.date||'')});
+        ex.add(d.period);
+      }
+    });
+    DATA.sort((a,b)=>String(a.period).localeCompare(String(b.period)));
+    if(DATA.length>100)DATA=DATA.slice(-100);
+    save();renderTable();
+    status.innerHTML='<span style="color:#16a34a">本地数据已加载 '+DATA.length+' 条（最近100期）。点「立即刷新」可在线增量更新。</span>';
+  }else{
+    status.textContent='本地数据为空，请点「立即刷新」在线获取。';
+  }
+})();
+</script>
+</body>
+</html>

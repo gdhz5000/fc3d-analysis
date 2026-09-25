@@ -1,0 +1,5 @@
+﻿*.token
+.gh_token
+*.log
+__pycache__
+*.pyc

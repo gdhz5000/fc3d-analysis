@@ -277,8 +277,8 @@
     <div class="card">
       <h3>号码验证 <span class="muted">（输入你打的号，对比历史开奖，看是否中过奖）</span></h3>
       <div class="row">
-        你的号码 <input type="text" id="check-num" maxlength="3" placeholder="如 123" style="width:110px;font-family:Consolas,monospace;font-size:18px;letter-spacing:4px">
-        倍数 <select id="check-times">
+        你的号码 <input type="text" id="check-num" maxlength="3" placeholder="如 123" oninput="updateBetCost()" style="width:110px;font-family:Consolas,monospace;font-size:18px;letter-spacing:4px">
+        倍数 <select id="check-times" onchange="updateBetCost()">
           <option value="1" selected>1倍</option><option value="2">2倍</option><option value="5">5倍</option><option value="10">10倍</option>
         </select>
         <button class="btn" onclick="checkNum()">开始对比</button>
@@ -287,6 +287,7 @@
       <div class="muted" style="margin-top:8px">
         中奖规则：<b>直选</b>（位置完全相同，1040元/注） · <b>组3</b>（有重号，位置不限，346元/注） · <b>组6</b>（3个不同号，位置不限，173元/注）。奖金按2元1注、1倍计算，选倍数后自动倍增。
       </div>
+      <div id="bet-cost" style="margin-top:10px"></div>
     </div>
     <div class="card" id="check-summary-card" style="display:none">
       <h3>对比结果汇总</h3>
@@ -665,6 +666,37 @@ function generate(){
 const PRIZE={zhi:1040, zu3:346, zu6:173};
 function sortDigits(numStr){return numStr.split('').sort().join('')}
 function isZu3(numStr){const a=numStr.split('').sort();return a[0]===a[1]||a[1]===a[2]}
+function isBaozi(numStr){const a=numStr.split('');return a[0]===a[1]&&a[1]===a[2]}
+// 根据号码形态计算各投注方式费用（1倍，2元/注）
+function getBetCost(num){
+  const baozi=isBaozi(num);
+  const zu3=!baozi&&isZu3(num);
+  const cnt=new Set(num.split('')).size;
+  const zhiPer=2;                          // 直选单注2元
+  const zu3Per=zu3?2:null;                 // 组3单注2元（仅组3形态可用）
+  const zu6Per=(!baozi&&cnt===3)?2:null;   // 组6单注2元（仅组6形态可用）
+  // 等效直选：把该号所有排列都买成直选的费用
+  const eqZhiCost=(baozi?1:zu3?3:6)*2;
+  return {baozi,zu3,zu6:!baozi&&cnt===3,zhiPer,zu3Per,zu6Per,eqZhiCost};
+}
+// 输入时实时显示投注方式与费用
+function updateBetCost(){
+  const input=document.getElementById('check-num').value.replace(/\D/g,'').padStart(3,'0');
+  const times=parseInt(document.getElementById('check-times').value)||1;
+  const box=document.getElementById('bet-cost');
+  if(input.length!==3||!/^\d{3}$/.test(input)){box.innerHTML='';return}
+  const c=getBetCost(input);
+  const form=c.baozi?'<span style="color:#f87171">豹子号（3个相同）</span>':c.zu3?'<span style="color:#fbbf24">组3形态（含重号）</span>':'<span style="color:#38bdf8">组6形态（3个不同）</span>';
+  const rows=[];
+  rows.push(`<b>直选</b>：${c.zhiPer*times}元/期 · 中1040元 · 需中${Math.ceil(2*times/1040*1)||1}次回本`);
+  if(c.zu3Per!=null)rows.push(`<b>组3</b>：${c.zu3Per*times}元/期 · 中346元`);
+  if(c.zu6Per!=null)rows.push(`<b>组6</b>：${c.zu6Per*times}元/期 · 中173元`);
+  rows.push(`<b>等效直选全包</b>：${c.eqZhiCost*times}元（买全${c.baozi?1:c.zu3?3:6}种排列，中1040元）`);
+  box.innerHTML=`<div style="background:rgba(96,165,250,.06);border:1px solid rgba(96,165,250,.18);border-radius:8px;padding:10px 12px">
+    <div style="margin-bottom:6px">号码形态：${form}</div>
+    <div style="font-size:12px;color:var(--text-dim);line-height:1.9">${rows.join('<br>')}</div>
+  </div>`;
+}
 function checkNum(){
   const input=document.getElementById('check-num').value.replace(/\D/g,'').padStart(3,'0');
   const times=parseInt(document.getElementById('check-times').value)||1;
@@ -675,6 +707,7 @@ function checkNum(){
   if(!DATA.length){status.textContent='暂无历史数据可对比';return}
   status.textContent='正在扫描 '+DATA.length+' 期...';
   const mySorted=sortDigits(input);
+  const c=getBetCost(input);
   const hits=[];
   let zhi=0,zu3=0,zu6=0;
   DATA.forEach(d=>{
@@ -687,17 +720,25 @@ function checkNum(){
     }
   });
   const totalPrize=hits.reduce((s,h)=>s+h.prize,0);
+  // 假设每期都按"最优组选方式"投注（组3形态打组3，组6形态打组6，豹子打直选）
+  const unitCost=(c.zu3?2:c.zu6?2:2)*times;   // 单期费用
+  const totalCost=unitCost*DATA.length;
+  const net=totalPrize-totalCost;
+  const perCost=(c.zu3?2:c.zu6?2:2)*times;
   // 汇总卡片
   const statHtml=[
     {label:'扫描期数',val:DATA.length,color:'#94a3b8'},
     {label:'直选命中',val:zhi+' 次',color:'#f472b6'},
     {label:'组3命中',val:zu3+' 次',color:'#fbbf24'},
     {label:'组6命中',val:zu6+' 次',color:'#38bdf8'},
-    {label:'中奖总次数',val:hits.length+' 次',color:'#a855f7'},
     {label:'中奖总金额',val:'¥ '+totalPrize.toLocaleString(),color:'#22d3ee'},
+    {label:'投注总成本',val:'¥ '+totalCost.toLocaleString(),color:'#94a3b8',sub:`${perCost}元/期 × ${DATA.length}期`},
+    {label:'净盈亏',val:(net>=0?'+':'')+'¥ '+net.toLocaleString(),color:net>=0?'#4ade80':'#f87171'},
+    {label:'回本难度',val:net>=0?'已回本':'差 ¥'+Math.abs(net).toLocaleString(),color:net>=0?'#4ade80':'#f87171'},
   ].map(s=>`<div style="background:rgba(15,21,56,.5);border:1px solid rgba(96,165,250,.18);border-radius:10px;padding:14px;text-align:center">
     <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">${s.label}</div>
-    <div style="font-size:22px;font-weight:800;color:${s.color};text-shadow:0 0 10px ${s.color}55">${s.val}</div>
+    <div style="font-size:20px;font-weight:800;color:${s.color};text-shadow:0 0 10px ${s.color}55">${s.val}</div>
+    ${s.sub?`<div style="font-size:11px;color:var(--text-dim);margin-top:3px">${s.sub}</div>`:''}
   </div>`).join('');
   document.getElementById('check-summary').innerHTML=statHtml;
   sumCard.style.display='block';
@@ -716,7 +757,7 @@ function checkNum(){
     </tr>`).join('');
   }
   listCard.style.display='block';
-  status.textContent=`对比完成：命中 ${hits.length} 次，奖金合计 ¥${totalPrize.toLocaleString()}`;
+  status.textContent=`对比完成：命中 ${hits.length} 次，奖金 ¥${totalPrize.toLocaleString()}，成本 ¥${totalCost.toLocaleString()}，净盈亏 ${net>=0?'+':''}¥${net.toLocaleString()}`;
 }
 
 /* ===== 初始化 ===== */

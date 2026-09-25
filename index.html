@@ -767,9 +767,9 @@ function updateBetCost(){
   const c=getBetCost(input);
   const form=c.baozi?'<span style="color:#f87171">豹子号（3个相同）</span>':c.zu3?'<span style="color:#fbbf24">组3形态（含重号）</span>':'<span style="color:#38bdf8">组6形态（3个不同）</span>';
   const rows=[];
-  rows.push(`<b>直选</b>：${c.zhiPer*times}元/期 · 中1040元 · 需中${Math.ceil(2*times/1040*1)||1}次回本`);
-  if(c.zu3Per!=null)rows.push(`<b>组3</b>：${c.zu3Per*times}元/期 · 中346元`);
-  if(c.zu6Per!=null)rows.push(`<b>组6</b>：${c.zu6Per*times}元/期 · 中173元`);
+  rows.push(`<b>直选</b>：${2*times}元/期 · 中${PRIZE.zhi}元 · 中1次即回本`);
+  if(c.zu3Per!=null)rows.push(`<b>组3</b>：${2*times}元/期 · 中${PRIZE.zu3}元 · 中1次即回本（覆盖3种排列）`);
+  if(c.zu6Per!=null)rows.push(`<b>组6</b>：${2*times}元/期 · 中${PRIZE.zu6}元 · 中1次即回本（覆盖6种排列）`);
   rows.push(`<b>等效直选全包</b>：${c.eqZhiCost*times}元（买全${c.baozi?1:c.zu3?3:6}种排列，中1040元）`);
   box.innerHTML=`<div style="background:rgba(96,165,250,.06);border:1px solid rgba(96,165,250,.18);border-radius:8px;padding:10px 12px">
     <div style="margin-bottom:6px">号码形态：${form}</div>
@@ -787,47 +787,69 @@ function checkNum(){
   status.textContent='正在扫描 '+DATA.length+' 期...';
   const mySorted=sortDigits(input);
   const c=getBetCost(input);
-  const hits=[];
-  let zhi=0,zu3=0,zu6=0;
+
+  // 分别统计每种投注方式的命中（同一期只按一种方式算，不重复）
+  // 直选：位置完全相同
+  // 组3：数字相同（位置不限）+ 开奖是组3形态
+  // 组6：数字相同（位置不限）+ 开奖是组6形态
+  const zhiHits=[],zu3Hits=[],zu6Hits=[];
   DATA.forEach(d=>{
     const win=d.num;
     if(win.length!==3)return;
-    if(win===input){hits.push({...d,type:'直选',prize:PRIZE.zhi*times});zhi++;return}
+    if(win===input){zhiHits.push({...d,prize:PRIZE.zhi*times});return}
     if(sortDigits(win)===mySorted){
-      if(isZu3(win)){hits.push({...d,type:'组3',prize:PRIZE.zu3*times});zu3++}
-      else{hits.push({...d,type:'组6',prize:PRIZE.zu6*times});zu6++}
+      if(isZu3(win))zu3Hits.push({...d,prize:PRIZE.zu3*times});
+      else zu6Hits.push({...d,prize:PRIZE.zu6*times});
     }
   });
-  const totalPrize=hits.reduce((s,h)=>s+h.prize,0);
-  // 假设每期都按"最优组选方式"投注（组3形态打组3，组6形态打组6，豹子打直选）
-  const unitCost=(c.zu3?2:c.zu6?2:2)*times;   // 单期费用
-  const totalCost=unitCost*DATA.length;
-  const net=totalPrize-totalCost;
-  const perCost=(c.zu3?2:c.zu6?2:2)*times;
-  // 汇总卡片
-  const statHtml=[
-    {label:'扫描期数',val:DATA.length,color:'#94a3b8'},
-    {label:'直选命中',val:zhi+' 次',color:'#f472b6'},
-    {label:'组3命中',val:zu3+' 次',color:'#fbbf24'},
-    {label:'组6命中',val:zu6+' 次',color:'#38bdf8'},
-    {label:'中奖总金额',val:'¥ '+totalPrize.toLocaleString(),color:'#22d3ee'},
-    {label:'投注总成本',val:'¥ '+totalCost.toLocaleString(),color:'#94a3b8',sub:`${perCost}元/期 × ${DATA.length}期`},
-    {label:'净盈亏',val:(net>=0?'+':'')+'¥ '+net.toLocaleString(),color:net>=0?'#4ade80':'#f87171'},
-    {label:'回本难度',val:net>=0?'已回本':'差 ¥'+Math.abs(net).toLocaleString(),color:net>=0?'#4ade80':'#f87171'},
-  ].map(s=>`<div style="background:rgba(15,21,56,.5);border:1px solid rgba(96,165,250,.18);border-radius:10px;padding:14px;text-align:center">
-    <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">${s.label}</div>
-    <div style="font-size:20px;font-weight:800;color:${s.color};text-shadow:0 0 10px ${s.color}55">${s.val}</div>
-    ${s.sub?`<div style="font-size:11px;color:var(--text-dim);margin-top:3px">${s.sub}</div>`:''}
-  </div>`).join('');
+
+  const periods=DATA.length;
+  const perBet=2*times;                 // 单注成本 = 2元 × 倍数
+  const totalCost=perBet*periods;       // 每期1注的总成本
+
+  // 每种方式的盈亏（成本都按每期1注2元×倍数算）
+  const ways=[];
+  ways.push({name:'直选',hits:zhiHits,count:zhiHits.length,prize:PRIZE.zhi,cost:totalCost,
+    net:zhiHits.reduce((s,h)=>s+h.prize,0)-totalCost,color:'#f472b6'});
+  if(c.zu3)ways.push({name:'组3',hits:zu3Hits,count:zu3Hits.length,prize:PRIZE.zu3,cost:totalCost,
+    net:zu3Hits.reduce((s,h)=>s+h.prize,0)-totalCost,color:'#fbbf24'});
+  if(c.zu6)ways.push({name:'组6',hits:zu6Hits,count:zu6Hits.length,prize:PRIZE.zu6,cost:totalCost,
+    net:zu6Hits.reduce((s,h)=>s+h.prize,0)-totalCost,color:'#38bdf8'});
+
+  // 找最优方式
+  const best=ways.reduce((a,b)=>b.net>a.net?b:a);
+
+  // 汇总卡片：每种投注方式一行，对比命中/奖金/成本/盈亏
+  let statHtml=`<div style="grid-column:1/-1;text-align:center;margin-bottom:4px">
+    <span style="font-size:12px;color:var(--text-dim)">扫描 ${periods} 期 · 单注成本 ${perBet}元/期 · 总成本 ¥${totalCost.toLocaleString()}（每期1注）</span>
+  </div>`;
+  statHtml+=ways.map(w=>{
+    const totalPrize=w.hits.reduce((s,h)=>s+h.prize,0);
+    const netColor=w.net>=0?'#4ade80':'#f87171';
+    const isBest=w.name===best.name;
+    return `<div style="background:rgba(15,21,56,.5);border:1px solid ${isBest?'#22d3ee':'rgba(96,165,250,.18)'};border-radius:10px;padding:14px;text-align:center;${isBest?'box-shadow:0 0 16px rgba(34,211,238,.3)':''}">
+      <div style="font-size:13px;font-weight:700;color:${w.color};margin-bottom:6px">${w.name}${isBest?' ★最优':''}</div>
+      <div style="font-size:11px;color:var(--text-dim)">命中 <b style="color:${w.color}">${w.count}</b> 次 · 奖金 <b style="color:#22d3ee">¥${totalPrize.toLocaleString()}</b></div>
+      <div style="font-size:18px;font-weight:800;color:${netColor};margin-top:4px;text-shadow:0 0 8px ${netColor}55">${w.net>=0?'+':''}¥${w.net.toLocaleString()}</div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:2px">${w.net>=0?'盈利':'亏损'} ¥${Math.abs(w.net).toLocaleString()}</div>
+    </div>`;
+  }).join('');
   document.getElementById('check-summary').innerHTML=statHtml;
   sumCard.style.display='block';
-  // 命中列表
-  document.getElementById('check-hit-count').textContent=hits.length+' 条';
+
+  // 命中列表：合并所有方式，标注类型
+  const allHits=[
+    ...zhiHits.map(h=>({...h,type:'直选'})),
+    ...zu3Hits.map(h=>({...h,type:'组3'})),
+    ...zu6Hits.map(h=>({...h,type:'组6'})),
+  ].sort((a,b)=>String(b.period).localeCompare(String(a.period)));
+
+  document.getElementById('check-hit-count').textContent=allHits.length+' 条';
   const tb=document.getElementById('check-tbody');
-  if(!hits.length){
+  if(!allHits.length){
     tb.innerHTML='<tr><td colspan="5" class="empty">未命中任何一期开奖号码</td></tr>';
   }else{
-    tb.innerHTML=hits.slice().reverse().map(h=>`<tr>
+    tb.innerHTML=allHits.map(h=>`<tr>
       <td>${h.period}</td>
       <td style="font-family:Consolas,monospace;font-size:18px;font-weight:bold;letter-spacing:4px;color:#7dd3fc">${h.num}</td>
       <td><span class="badge ${h.type==='直选'?'hot':h.type==='组3'?'cold':''}">${h.type}</span></td>
@@ -836,7 +858,7 @@ function checkNum(){
     </tr>`).join('');
   }
   listCard.style.display='block';
-  status.textContent=`对比完成：命中 ${hits.length} 次，奖金 ¥${totalPrize.toLocaleString()}，成本 ¥${totalCost.toLocaleString()}，净盈亏 ${net>=0?'+':''}¥${net.toLocaleString()}`;
+  status.textContent=`对比完成：直选中${zhiHits.length}次${c.zu3?` · 组3中${zu3Hits.length}次`:''}${c.zu6?` · 组6中${zu6Hits.length}次`:''} · 最优方式「${best.name}」净盈亏${best.net>=0?'+':''}¥${best.net.toLocaleString()}`;
 }
 
 /* ===== 初始化 ===== */

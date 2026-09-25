@@ -287,10 +287,44 @@
       </div>
       <div class="row" style="margin-bottom:8px">
         杀号 <input type="text" id="kill-num" maxlength="10" placeholder="如 3,7（排除这些数字）" style="width:200px">
+        胆码 <input type="text" id="dan-num" maxlength="10" placeholder="如 1,5（必含这些数字）" style="width:200px">
+      </div>
+      <div class="row" style="margin-bottom:8px;flex-wrap:wrap;align-items:flex-start">
+        <button class="btn ghost sm" onclick="document.getElementById('filter-box').style.display=document.getElementById('filter-box').style.display==='none'?'block':'none'">⚙ 高级筛选</button>
         <button class="btn" onclick="generate()">生成参考号码</button>
         <button class="btn ghost" onclick="copyRecs()" id="copy-btn" style="display:none">一键复制</button>
+        <button class="btn ghost sm" onclick="resetFilter()">清空筛选</button>
       </div>
-      <div class="muted">说明：依据所选策略对0-9各数字按权重抽样，分别填入百/十/个位。杀号可排除指定数字。<b>权重仅基于历史统计，不代表未来概率。</b></div>
+      <div id="filter-box" style="display:none;background:rgba(96,165,250,.05);border:1px solid rgba(96,165,250,.18);border-radius:8px;padding:12px;margin-bottom:8px">
+        <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
+          和值 <input type="number" id="f-sum-min" min="0" max="27" placeholder="最小" style="width:70px"> ~
+          <input type="number" id="f-sum-max" min="0" max="27" placeholder="最大" style="width:70px">
+          跨度 <input type="number" id="f-span-min" min="0" max="9" placeholder="最小" style="width:70px"> ~
+          <input type="number" id="f-span-max" min="0" max="9" placeholder="最大" style="width:70px">
+        </div>
+        <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
+          奇偶比
+          <label><input type="checkbox" class="f-odd" value="3:0"> 3:0</label>
+          <label><input type="checkbox" class="f-odd" value="2:1"> 2:1</label>
+          <label><input type="checkbox" class="f-odd" value="1:2"> 1:2</label>
+          <label><input type="checkbox" class="f-odd" value="0:3"> 0:3</label>
+        </div>
+        <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
+          大小比
+          <label><input type="checkbox" class="f-big" value="3:0"> 3:0</label>
+          <label><input type="checkbox" class="f-big" value="2:1"> 2:1</label>
+          <label><input type="checkbox" class="f-big" value="1:2"> 1:2</label>
+          <label><input type="checkbox" class="f-big" value="0:3"> 0:3</label>
+        </div>
+        <div class="row" style="flex-wrap:wrap;gap:10px">
+          形态
+          <label><input type="radio" name="f-form" value=""> 不限</label>
+          <label><input type="radio" name="f-form" value="组六"> 组六</label>
+          <label><input type="radio" name="f-form" value="组三"> 组三</label>
+          <label><input type="radio" name="f-form" value="豹子"> 豹子</label>
+        </div>
+      </div>
+      <div class="muted">说明：策略决定数字权重，高级筛选只保留符合所有条件的号码（留空=不限制）。<b>权重仅基于历史统计，不代表未来概率。</b></div>
     </div>
     <div class="card">
       <h3>生成结果 <span class="badge" id="rec-count">0</span></h3>
@@ -802,6 +836,17 @@ function generate(){
   const cnt=+document.getElementById('group-count').value;
   const killRaw=document.getElementById('kill-num').value.replace(/[^\d]/g,'');
   const kill=new Set([...killRaw].map(Number));
+  // 胆码（必含）
+  const danRaw=document.getElementById('dan-num').value.replace(/[^\d]/g,'');
+  const dan=new Set([...danRaw].map(Number));
+  // 高级筛选条件
+  const fSumMin=document.getElementById('f-sum-min').value;
+  const fSumMax=document.getElementById('f-sum-max').value;
+  const fSpanMin=document.getElementById('f-span-min').value;
+  const fSpanMax=document.getElementById('f-span-max').value;
+  const fOdd=new Set([...document.querySelectorAll('.f-odd:checked')].map(c=>c.value));
+  const fBig=new Set([...document.querySelectorAll('.f-big:checked')].map(c=>c.value));
+  const fForm=document.querySelector('input[name="f-form"]:checked')?.value||'';
 
   const pos={百:Array(10).fill(0),十:Array(10).fill(0),个:Array(10).fill(0)};
   const sumCnt=Array(10).fill(0);
@@ -860,6 +905,20 @@ function generate(){
     if(!n||seen.has(n))continue;
     seen.add(n);
     const f=getFeatures(n);
+    // 胆码过滤：必含所有胆码
+    if(dan.size){const digits=new Set([...n].map(Number));let ok=true;dan.forEach(d=>{if(!digits.has(d))ok=false});if(!ok)continue}
+    // 和值范围
+    if(fSumMin!==''&&f.sum<+fSumMin)continue;
+    if(fSumMax!==''&&f.sum>+fSumMax)continue;
+    // 跨度范围
+    if(fSpanMin!==''&&f.span<+fSpanMin)continue;
+    if(fSpanMax!==''&&f.span>+fSpanMax)continue;
+    // 奇偶比
+    if(fOdd.size&&!fOdd.has(f.oddEven))continue;
+    // 大小比
+    if(fBig.size&&!fBig.has(f.bigSmall))continue;
+    // 形态
+    if(fForm&&f.form!==fForm)continue;
     const digits=[...n].map(Number);
     const curMissSum=digits.reduce((s,d)=>s+currentMiss[d],0);
     const freqSum=digits.reduce((s,d)=>s+sumCnt[d],0);
@@ -876,12 +935,21 @@ function generate(){
 
   document.getElementById('rec-count').textContent=results.length+' 组';
   document.getElementById('copy-btn').style.display=results.length?'inline-block':'none';
+  // 已应用的筛选条件描述
+  const filterDesc=[];
+  if(kill.size)filterDesc.push(`杀号：${[...kill].sort((a,b)=>a-b).join(',')}`);
+  if(dan.size)filterDesc.push(`胆码：${[...dan].sort((a,b)=>a-b).join(',')}`);
+  if(fSumMin!==''||fSumMax!=='')filterDesc.push(`和值：${fSumMin||'0'}-${fSumMax||'27'}`);
+  if(fSpanMin!==''||fSpanMax!=='')filterDesc.push(`跨度：${fSpanMin||'0'}-${fSpanMax||'9'}`);
+  if(fOdd.size)filterDesc.push(`奇偶：${[...fOdd].join('/')}`);
+  if(fBig.size)filterDesc.push(`大小：${[...fBig].join('/')}`);
+  if(fForm)filterDesc.push(`形态：${fForm}`);
   if(!results.length){
-    document.getElementById('rec-list').innerHTML='<div class="empty">生成失败，请减少杀号数量后重试</div>';
+    document.getElementById('rec-list').innerHTML=`<div class="empty">生成失败：筛选条件可能过严，请放宽条件（如减少杀号、扩大和值范围等）后重试<br><span style="font-size:12px">已应用条件：${filterDesc.join(' · ')||'无'}</span></div>`;
     return;
   }
   document.getElementById('rec-list').innerHTML=`
-    <div class="muted" style="margin-bottom:8px">策略：<b>${strategyName}</b>${kill.size?` · 杀号：<b style="color:#f87171">${[...kill].sort((a,b)=>a-b).join(',')}</b>`:''} · 共 <b>${results.length}</b> 组</div>
+    <div class="muted" style="margin-bottom:8px">策略：<b>${strategyName}</b>${filterDesc.length?` · ${filterDesc.join(' · ')}`:''} · 共 <b>${results.length}</b> 组</div>
     ${results.map((r,i)=>`
       <div class="rec-item">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
@@ -896,6 +964,17 @@ function generate(){
       </div>`).join('')}
     <div class="muted" style="margin-top:10px">⚠ 以上号码仅基于历史统计的加权抽样结果，彩票为随机事件，<b>不具备预测效力</b>，请勿作为投注依据。</div>
   `;
+}
+function resetFilter(){
+  document.getElementById('kill-num').value='';
+  document.getElementById('dan-num').value='';
+  document.getElementById('f-sum-min').value='';
+  document.getElementById('f-sum-max').value='';
+  document.getElementById('f-span-min').value='';
+  document.getElementById('f-span-max').value='';
+  document.querySelectorAll('.f-odd').forEach(c=>c.checked=false);
+  document.querySelectorAll('.f-big').forEach(c=>c.checked=false);
+  document.querySelector('input[name="f-form"][value=""]').checked=true;
 }
 function copyRecs(){
   const items=document.querySelectorAll('#rec-list .nums');

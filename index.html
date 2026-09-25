@@ -271,6 +271,41 @@
   <!-- 号码参考 -->
   <section class="panel" id="panel-predict">
     <div class="card">
+      <h3>筛选条件</h3>
+      <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
+        杀号 <input type="text" id="kill-num" maxlength="10" placeholder="如 3,7（排除）" style="width:180px">
+        胆码 <input type="text" id="dan-num" maxlength="10" placeholder="如 1,5（必含）" style="width:180px">
+        <button class="btn ghost sm" onclick="resetFilter()">清空筛选</button>
+      </div>
+      <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
+        和值 <input type="number" id="f-sum-min" min="0" max="27" placeholder="最小" style="width:70px"> ~
+        <input type="number" id="f-sum-max" min="0" max="27" placeholder="最大" style="width:70px">
+        跨度 <input type="number" id="f-span-min" min="0" max="9" placeholder="最小" style="width:70px"> ~
+        <input type="number" id="f-span-max" min="0" max="9" placeholder="最大" style="width:70px">
+      </div>
+      <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
+        奇偶比
+        <label><input type="checkbox" class="f-odd" value="3:0"> 3:0</label>
+        <label><input type="checkbox" class="f-odd" value="2:1"> 2:1</label>
+        <label><input type="checkbox" class="f-odd" value="1:2"> 1:2</label>
+        <label><input type="checkbox" class="f-odd" value="0:3"> 0:3</label>
+      </div>
+      <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
+        大小比
+        <label><input type="checkbox" class="f-big" value="3:0"> 3:0</label>
+        <label><input type="checkbox" class="f-big" value="2:1"> 2:1</label>
+        <label><input type="checkbox" class="f-big" value="1:2"> 1:2</label>
+        <label><input type="checkbox" class="f-big" value="0:3"> 0:3</label>
+      </div>
+      <div class="row" style="flex-wrap:wrap;gap:10px">
+        形态
+        <label><input type="radio" name="f-form" value="" checked> 不限</label>
+        <label><input type="radio" name="f-form" value="组六"> 组六</label>
+        <label><input type="radio" name="f-form" value="组三"> 组三</label>
+        <label><input type="radio" name="f-form" value="豹子"> 豹子</label>
+      </div>
+    </div>
+    <div class="card">
       <h3>参考号码生成</h3>
       <div class="row" style="margin-bottom:8px">
         策略 <select id="strategy">
@@ -284,47 +319,10 @@
         组数 <select id="group-count">
           <option>5</option><option selected>10</option><option>20</option>
         </select>
-      </div>
-      <div class="row" style="margin-bottom:8px">
-        杀号 <input type="text" id="kill-num" maxlength="10" placeholder="如 3,7（排除这些数字）" style="width:200px">
-        胆码 <input type="text" id="dan-num" maxlength="10" placeholder="如 1,5（必含这些数字）" style="width:200px">
-      </div>
-      <div class="row" style="margin-bottom:8px;flex-wrap:wrap;align-items:flex-start">
-        <button class="btn ghost sm" onclick="document.getElementById('filter-box').style.display=document.getElementById('filter-box').style.display==='none'?'block':'none'">⚙ 高级筛选</button>
         <button class="btn" onclick="generate()">生成参考号码</button>
         <button class="btn ghost" onclick="copyRecs()" id="copy-btn" style="display:none">一键复制</button>
-        <button class="btn ghost sm" onclick="resetFilter()">清空筛选</button>
       </div>
-      <div id="filter-box" style="display:none;background:rgba(96,165,250,.05);border:1px solid rgba(96,165,250,.18);border-radius:8px;padding:12px;margin-bottom:8px">
-        <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
-          和值 <input type="number" id="f-sum-min" min="0" max="27" placeholder="最小" style="width:70px"> ~
-          <input type="number" id="f-sum-max" min="0" max="27" placeholder="最大" style="width:70px">
-          跨度 <input type="number" id="f-span-min" min="0" max="9" placeholder="最小" style="width:70px"> ~
-          <input type="number" id="f-span-max" min="0" max="9" placeholder="最大" style="width:70px">
-        </div>
-        <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
-          奇偶比
-          <label><input type="checkbox" class="f-odd" value="3:0"> 3:0</label>
-          <label><input type="checkbox" class="f-odd" value="2:1"> 2:1</label>
-          <label><input type="checkbox" class="f-odd" value="1:2"> 1:2</label>
-          <label><input type="checkbox" class="f-odd" value="0:3"> 0:3</label>
-        </div>
-        <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:10px">
-          大小比
-          <label><input type="checkbox" class="f-big" value="3:0"> 3:0</label>
-          <label><input type="checkbox" class="f-big" value="2:1"> 2:1</label>
-          <label><input type="checkbox" class="f-big" value="1:2"> 1:2</label>
-          <label><input type="checkbox" class="f-big" value="0:3"> 0:3</label>
-        </div>
-        <div class="row" style="flex-wrap:wrap;gap:10px">
-          形态
-          <label><input type="radio" name="f-form" value=""> 不限</label>
-          <label><input type="radio" name="f-form" value="组六"> 组六</label>
-          <label><input type="radio" name="f-form" value="组三"> 组三</label>
-          <label><input type="radio" name="f-form" value="豹子"> 豹子</label>
-        </div>
-      </div>
-      <div class="muted">说明：策略决定数字权重，高级筛选只保留符合所有条件的号码（留空=不限制）。<b>权重仅基于历史统计，不代表未来概率。</b></div>
+      <div class="muted">说明：策略决定数字权重，上方筛选条件只保留符合所有条件的号码（留空=不限制）。<b>权重仅基于历史统计，不代表未来概率。</b></div>
     </div>
     <div class="card">
       <h3>生成结果 <span class="badge" id="rec-count">0</span></h3>

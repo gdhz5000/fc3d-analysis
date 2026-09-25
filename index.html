@@ -257,17 +257,23 @@
           <option value="cold">冷号补偿（偏好遗漏期数长的数字）</option>
           <option value="hot">热号追势（偏好近期出现多的数字）</option>
           <option value="balanced" selected>综合均衡（冷热结合）</option>
+          <option value="sum">和值策略（按历史和值分布选和值再拆分）</option>
+          <option value="span">跨度策略（按历史跨度分布选跨度再生成）</option>
           <option value="random">纯随机</option>
         </select>
         组数 <select id="group-count">
           <option>5</option><option selected>10</option><option>20</option>
         </select>
-        <button class="btn" onclick="generate()">生成参考号码</button>
       </div>
-      <div class="muted">说明：依据所选策略对0-9各数字按权重抽样，分别填入百/十/个位。<b>权重仅基于历史统计，不代表未来概率。</b></div>
+      <div class="row" style="margin-bottom:8px">
+        杀号 <input type="text" id="kill-num" maxlength="10" placeholder="如 3,7（排除这些数字）" style="width:200px">
+        <button class="btn" onclick="generate()">生成参考号码</button>
+        <button class="btn ghost" onclick="copyRecs()" id="copy-btn" style="display:none">一键复制</button>
+      </div>
+      <div class="muted">说明：依据所选策略对0-9各数字按权重抽样，分别填入百/十/个位。杀号可排除指定数字。<b>权重仅基于历史统计，不代表未来概率。</b></div>
     </div>
     <div class="card">
-      <h3>生成结果</h3>
+      <h3>生成结果 <span class="badge" id="rec-count">0</span></h3>
       <div id="rec-list"></div>
     </div>
   </section>
@@ -589,16 +595,49 @@ function renderRecPlaceholder(){
 }
 function weightedPick(weights){
   const sum=weights.reduce((a,b)=>a+b,0);
+  if(sum<=0)return Math.floor(Math.random()*weights.length);
   let r=Math.random()*sum;
   for(let i=0;i<weights.length;i++){r-=weights[i];if(r<=0)return i}
   return weights.length-1;
+}
+// 号码特征：和值、跨度、奇偶比、大小比、形态
+function getFeatures(num){
+  const d=[...num].map(Number);
+  const sum=d[0]+d[1]+d[2];
+  const span=Math.max(...d)-Math.min(...d);
+  const odd=d.filter(x=>x%2===1).length;
+  const big=d.filter(x=>x>=5).length;
+  let form;
+  if(d[0]===d[1]&&d[1]===d[2])form='豹子';
+  else if(d[0]===d[1]||d[1]===d[2]||d[0]===d[2])form='组3';
+  else form='组6';
+  return {sum,span,oddEven:`${odd}:${3-odd}`,bigSmall:`${big}:${3-big}`,form};
+}
+// 把和值拆成3个数字（百位0-9）
+function splitSum(sum){
+  for(let t=0;t<200;t++){
+    const a=Math.floor(Math.random()*10);
+    const b=Math.floor(Math.random()*10);
+    const c=sum-a-b;
+    if(c>=0&&c<=9)return `${a}${b}${c}`;
+  }
+  return null;
+}
+// 按跨度生成3个数字
+function genBySpan(span){
+  for(let t=0;t<200;t++){
+    const d=[Math.floor(Math.random()*10),Math.floor(Math.random()*10),Math.floor(Math.random()*10)];
+    if(Math.max(...d)-Math.min(...d)===span)return d.join('');
+  }
+  return null;
 }
 function generate(){
   if(!DATA.length){alert('暂无历史数据，请先录入或导入');return}
   const strat=document.getElementById('strategy').value;
   const cnt=+document.getElementById('group-count').value;
+  const killRaw=document.getElementById('kill-num').value.replace(/[^\d]/g,'');
+  const kill=new Set([...killRaw].map(Number));
 
-  // 计算权重
   const pos={百:Array(10).fill(0),十:Array(10).fill(0),个:Array(10).fill(0)};
   const sumCnt=Array(10).fill(0);
   const sorted=[...DATA].sort((a,b)=>String(a.period).localeCompare(String(b.period)));
@@ -608,57 +647,97 @@ function generate(){
   for(let d=0;d<10;d++){let last=-1;sorted.forEach((r,i)=>{if(r.num.includes(d))last=i});currentMiss[d]=total-1-last}
   const avg=total*3/10;
 
-  // 各位的权重
+  // 和值分布、跨度分布
+  const sumDist=Array(28).fill(0),spanDist=Array(10).fill(0);
+  sorted.forEach(d=>{const f=getFeatures(d.num);sumDist[f.sum]++;spanDist[f.span]++});
+
+  // 各位权重（杀号权重置0）
   const wPos={百:[],十:[],个:[]};
   ['百','十','个'].forEach(k=>{
     wPos[k]=pos[k].map((c,d)=>{
+      if(kill.has(d))return 0;
       const miss=currentMiss[d];
-      let w=1;
-      if(strat==='hot')w=Math.max(0.1,c+0.5);
-      else if(strat==='cold')w=Math.max(0.1,(avg-c)+miss*0.5+0.5);
-      else if(strat==='balanced')w=Math.max(0.1,c*0.5+(avg-c)+miss*0.3+0.5);
-      else w=1; // random
-      return w;
+      if(strat==='hot')return Math.max(0.1,c+0.5);
+      if(strat==='cold')return Math.max(0.1,(avg-c)+miss*0.5+0.5);
+      if(strat==='balanced')return Math.max(0.1,c*0.5+(avg-c)+miss*0.3+0.5);
+      return 1;
     });
   });
+  // 和值权重
+  const wSum=sumDist.map(c=>Math.max(0.1,c));
+  // 跨度权重
+  const wSpan=spanDist.map(c=>Math.max(0.1,c));
 
-  const strategyName={hot:'热号追势',cold:'冷号补偿',balanced:'综合均衡',random:'纯随机'}[strat];
+  const strategyName={hot:'热号追势',cold:'冷号补偿',balanced:'综合均衡',sum:'和值策略',span:'跨度策略',random:'纯随机'}[strat];
   const results=[];
-  for(let i=0;i<cnt;i++){
-    let n='';
-    ['百','十','个'].forEach(k=>{
-      let pick;
-      if(strat==='random'){pick=Math.floor(Math.random()*10)}
-      else{pick=weightedPick(wPos[k])}
-      n+=pick;
-    });
+  let tries=0;
+  const seen=new Set();
+  while(results.length<cnt&&tries<cnt*50){
+    tries++;
+    let n=null;
+    if(strat==='sum'){
+      const s=weightedPick(wSum);
+      n=splitSum(s);
+      if(n&&[...n].some(x=>kill.has(+x)))n=null;
+    }else if(strat==='span'){
+      const sp=weightedPick(wSpan);
+      n=genBySpan(sp);
+      if(n&&[...n].some(x=>kill.has(+x)))n=null;
+    }else{
+      n='';
+      ['百','十','个'].forEach(k=>{
+        let pick=strat==='random'?Math.floor(Math.random()*10):weightedPick(wPos[k]);
+        // 杀号时若权重全0则退化为随机非杀号
+        if(kill.has(pick)){const avail=[0,1,2,3,4,5,6,7,8,9].filter(x=>!kill.has(x));pick=avail[Math.floor(Math.random()*avail.length)]}
+        n+=pick;
+      });
+    }
+    if(!n||seen.has(n))continue;
+    seen.add(n);
+    const f=getFeatures(n);
+    const digits=[...n].map(Number);
+    const curMissSum=digits.reduce((s,d)=>s+currentMiss[d],0);
+    const freqSum=digits.reduce((s,d)=>s+sumCnt[d],0);
     const reasonParts=[];
     if(strat==='hot')reasonParts.push('优先选取历史出现频率较高的数字');
     else if(strat==='cold')reasonParts.push('偏向出现较少、当前遗漏较长的数字');
     else if(strat==='balanced')reasonParts.push('结合频率与遗漏值综合加权');
+    else if(strat==='sum')reasonParts.push(`和值=${f.sum}（历史和值分布加权）`);
+    else if(strat==='span')reasonParts.push(`跨度=${f.span}（历史跨度分布加权）`);
     else reasonParts.push('纯随机抽样');
-    // 标注该号码特征
-    const digits=[...n].map(Number);
-    const curMissSum=digits.reduce((s,d)=>s+currentMiss[d],0);
-    const freqSum=digits.reduce((s,d)=>s+sumCnt[d],0);
-    reasonParts.push(`本期数字当前遗漏合计=${curMissSum}，历史合计出现=${freqSum}次`);
-    results.push({num:n,reason:reasonParts.join('；')});
+    reasonParts.push(`遗漏合计=${curMissSum}，历史出现=${freqSum}次`);
+    results.push({num:n,reason:reasonParts.join('；'),f});
   }
-  // 去重展示
-  const seen=new Set();const unique=[];
-  results.forEach(r=>{if(!seen.has(r.num)){seen.add(r.num);unique.push(r)}});
-  // 若去重后不足，补齐随机
-  while(unique.length<cnt){const n=fmtNum(Math.floor(Math.random()*1000));if(!seen.has(n)){seen.add(n);unique.push({num:n,reason:'补充随机'})}}
 
+  document.getElementById('rec-count').textContent=results.length+' 组';
+  document.getElementById('copy-btn').style.display=results.length?'inline-block':'none';
+  if(!results.length){
+    document.getElementById('rec-list').innerHTML='<div class="empty">生成失败，请减少杀号数量后重试</div>';
+    return;
+  }
   document.getElementById('rec-list').innerHTML=`
-    <div class="muted" style="margin-bottom:8px">策略：<b>${strategyName}</b> · 共生成 <b>${cnt}</b> 组参考号码</div>
-    ${unique.slice(0,cnt).map((r,i)=>`
+    <div class="muted" style="margin-bottom:8px">策略：<b>${strategyName}</b>${kill.size?` · 杀号：<b style="color:#f87171">${[...kill].sort((a,b)=>a-b).join(',')}</b>`:''} · 共 <b>${results.length}</b> 组</div>
+    ${results.map((r,i)=>`
       <div class="rec-item">
-        <div><span class="muted">${i+1}.</span> <span class="nums">${r.num}</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div><span class="muted">${i+1}.</span> <span class="nums">${r.num}</span>
+            <span class="badge ${r.f.form==='豹子'?'hot':r.f.form==='组3'?'cold':''}" style="margin-left:10px">${r.f.form}</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-dim)">
+            和值 <b style="color:#7dd3fc">${r.f.sum}</b> · 跨度 <b style="color:#c084fc">${r.f.span}</b> · 奇偶 <b>${r.f.oddEven}</b> · 大小 <b>${r.f.bigSmall}</b>
+          </div>
+        </div>
         <div class="reason">${r.reason}</div>
       </div>`).join('')}
     <div class="muted" style="margin-top:10px">⚠ 以上号码仅基于历史统计的加权抽样结果，彩票为随机事件，<b>不具备预测效力</b>，请勿作为投注依据。</div>
   `;
+}
+function copyRecs(){
+  const items=document.querySelectorAll('#rec-list .nums');
+  if(!items.length)return;
+  const text=[...items].map(e=>e.textContent.trim()).join('\n');
+  if(navigator.clipboard){navigator.clipboard.writeText(text).then(()=>{const b=document.getElementById('copy-btn');const t=b.textContent;b.textContent='已复制 ✓';setTimeout(()=>b.textContent=t,1500)})}
+  else{const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);alert('已复制 '+items.length+' 组号码')}
 }
 
 /* ===== 号码验证：对比历史开奖 ===== */

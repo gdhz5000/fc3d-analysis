@@ -202,6 +202,7 @@
         <span id="fetch-status" class="muted">页面加载中：先读取本地数据，再在线增量...</span>
       </div>
       <div class="muted" style="margin-top:6px">打开页面自动加载本地 data.json（200期基础数据，可用 fetch_data.py 重新抓取更新），再调 apihz 公共接口按期号循环增量获取最新开奖。在线接口偶发不稳，失败时仍可使用本地数据。</div>
+      <div id="next-draw" style="margin-top:10px"></div>
     </div>
 
     <div class="card">
@@ -358,7 +359,11 @@ function exportData(type){
 function renderTable(){
   const tb=document.getElementById('data-tbody');
   document.getElementById('data-count').textContent=DATA.length+' 条';
-  if(!DATA.length){tb.innerHTML='<tr><td colspan="5" class="empty">暂无数据，正在自动获取官方开奖数据...</td></tr>';return}
+  const nextBox=document.getElementById('next-draw');
+  if(!DATA.length){
+    tb.innerHTML='<tr><td colspan="5" class="empty">暂无数据，正在自动获取官方开奖数据...</td></tr>';
+    nextBox.innerHTML='';return;
+  }
   // 倒序显示
   tb.innerHTML=DATA.slice().reverse().map((d,idx)=>{
     const realIdx=DATA.length-1-idx;
@@ -370,6 +375,28 @@ function renderTable(){
       <td><button class="btn danger sm" onclick="del(${realIdx})">删</button></td>
     </tr>`;
   }).join('');
+  // 下期开奖时间：最新一期日期+1天，福彩3D每日开奖
+  const latest=[...DATA].sort((a,b)=>String(b.period).localeCompare(String(a.period)))[0];
+  const dateStr=(latest.date||'').match(/\d{4}-\d{1,2}-\d{1,2}/);
+  if(dateStr){
+    const d=new Date(dateStr[0]+'T00:00:00');
+    d.setDate(d.getDate()+1);
+    const wk=['日','一','二','三','四','五','六'][d.getDay()];
+    const mm=String(d.getMonth()+1).padStart(2,'0');
+    const dd=String(d.getDate()).padStart(2,'0');
+    const nextPeriod=String(parseInt(latest.period)+1);
+    nextBox.innerHTML=`<div style="background:linear-gradient(90deg,rgba(34,211,238,.10),rgba(168,85,247,.08));border:1px solid rgba(34,211,238,.3);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div><span style="color:var(--text-dim);font-size:12px">下期开奖</span>
+        <div style="font-size:18px;font-weight:800;color:#22d3ee;text-shadow:0 0 10px rgba(34,211,238,.4)">${d.getFullYear()}-${mm}-${dd}（周${wk}）</div>
+      </div>
+      <div style="text-align:right"><span style="color:var(--text-dim);font-size:12px">预计期号</span>
+        <div style="font-size:18px;font-weight:800;color:#a855f7;text-shadow:0 0 10px rgba(168,85,247,.4)">${nextPeriod}</div>
+      </div>
+      <div style="text-align:right"><span style="color:var(--text-dim);font-size:12px">开奖时间</span>
+        <div style="font-size:18px;font-weight:800;color:#fbbf24;text-shadow:0 0 10px rgba(251,191,36,.4)">21:15</div>
+      </div>
+    </div>`;
+  }else{nextBox.innerHTML=''}
 }
 
 /* ===== 在线抓取（apihz 公共接口 + 直连/多代理兜底，按期号循环增量） ===== */
